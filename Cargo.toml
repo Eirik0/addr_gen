@@ -1,0 +1,6 @@
+[package]
+name = "addr_gen"
+version = "0.1.0"
+authors = ["Eirik Ogilvie-Wigley <eirik@z.cash>"]
+
+[dependencies]
