@@ -59,7 +59,7 @@ impl U256 {
         Ok(U256 {d0, d1})
     }
 
-    pub fn to_hex_str(&self) -> String {
+    pub fn to_hex_string(&self) -> String {
         let mut d0 = self.d0;
         let mut d1 = self.d1;
         let mut bytes = [0u8; 64];
@@ -244,10 +244,10 @@ mod tests {
     }
 
     #[test]
-    fn test_to_hex_str() {
+    fn test_to_hex_string() {
         let hex_str = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-        assert_eq!(hex_str, U256::from_hex_str(hex_str).unwrap().to_hex_str());
-        assert_eq!("f", U256::from_hex_str("f").unwrap().to_hex_str());
+        assert_eq!(hex_str, U256::from_hex_str(hex_str).unwrap().to_hex_string());
+        assert_eq!("f", U256::from_hex_str("f").unwrap().to_hex_string());
     }
 
     #[test]

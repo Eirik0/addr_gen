@@ -53,7 +53,7 @@ impl FieldElement {
         let d0 = self.n.d0;
         let d1 = self.n.d1;
 
-        self.n = U256::mul_u128(&d0, &d0);
+        self.n = U256::mul_u128(&d0, &rhs.n.d0);
         self.mul_assign_2_pow_256();
 
         let mut l0r1 = FieldElement::new(U256::mul_u128(&d0, &rhs.n.d1));
@@ -67,7 +67,7 @@ impl FieldElement {
     }
 
     pub fn div_assign(&mut self, rhs: &FieldElement) {
-        self.mul_assign(&rhs.inverted());
+        self.mul_assign(&rhs.invert());
     }
 
     pub fn mul_assign_2_pow_128(&mut self) {
@@ -100,27 +100,27 @@ impl FieldElement {
         self.add_assign(&FieldElement::new(U256::mul_u128(&d1, &TWO_POW_256_MOD_P)));
     }
 
-    pub fn negate(&mut self) {
+    pub fn negate_assign(&mut self) {
         self.n = P.sub(&self.n);
     }
 
-    pub fn double(&mut self) {
+    pub fn double_assign(&mut self) {
         if self.n.overflowing_double() {
             self.n.add_assign(TWO_POW_256_MOD_P);
         }
         FieldElement::normalize_mod_p(&mut self.n);
     }
 
-    pub fn triple(&mut self) {
+    pub fn triple_assign(&mut self) {
         let n = self.n.clone();
-        self.double();
+        self.double_assign();
         if self.n.overflowing_add_assign(&n) {
             self.n.add_assign(TWO_POW_256_MOD_P);
         }
         FieldElement::normalize_mod_p(&mut self.n);
     }
 
-    pub fn square(&mut self) {
+    pub fn square_assign(&mut self) {
         let d0 = self.n.d0;
         let d1 = self.n.d1;
 
@@ -135,22 +135,23 @@ impl FieldElement {
         self.add_assign(&FieldElement::new(U256::mul_u128(&d1, &d1)));
     }
 
-    pub fn inverted(&self) -> FieldElement {
-        let mut inv = FieldElement::new(U256::from_u128(1));
+    pub fn invert(&self) -> FieldElement {
+        let mut inv = self.clone();
         let mut square = self.clone();
-        let mut flag = 1u128;
-        while flag != 0x80000000 {
+        let mut flag = 2u128;
+        while flag != 0x100000000 {
+            square.square_assign();
             if P_MINUS_2_D1 & flag == flag {
                 inv.mul_assign(&square);
             }
-            square.square();
             flag <<= 1;
         }
-        square.square();
-        let mut i = 32;
+        square.square_assign();
+        let mut i = 33;
+        // After the 33st least significant bit, P - 2 is all 1s
         while i < 256 {
+            square.square_assign();
             inv.mul_assign(&square);
-            square.square();
             i += 1;
         }
         inv
@@ -204,21 +205,21 @@ impl Point {
         // let x = s * s - 2 * self.x;
         // let y = s * (self.x - x) - self.y;
         let mut s = self.x.clone();
-        s.square();
-        s.triple();
+        s.square_assign();
+        s.triple_assign();
         let mut y_mul_2 = self.y.clone();
-        y_mul_2.double();
+        y_mul_2.double_assign();
         s.div_assign(&y_mul_2);
 
         let mut x = self.x.clone();
 
-        self.x.double();
-        self.x.negate();
+        self.x.double_assign();
+        self.x.negate_assign();
         let mut s_sq = s.clone();
-        s_sq.square();
+        s_sq.square_assign();
         self.x.add_assign(&s_sq);
 
-        self.y.negate();
+        self.y.negate_assign();
         x.sub_assign(&self.x);
         x.mul_assign(&s);
         self.y.add_assign(&x);
@@ -334,5 +335,13 @@ mod tests {
         let n1 = FieldElement::new(P_MINUS_1);
         let n2 = FieldElement::new(P_MINUS_2);
         assert_eq!(two, n1 * &n2);
+    }
+
+    #[test]
+    fn test_invert() {
+        let one = FieldElement::new(U256::from_u128(1));
+        let p_minus_one = FieldElement::new(P_MINUS_1);
+        assert_eq!(one, one.invert());
+        assert_eq!(p_minus_one, p_minus_one.invert());
     }
 }
