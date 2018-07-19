@@ -1,4 +1,4 @@
-use std::ops::{AddAssign, MulAssign, Mul};
+use std::ops::Mul;
 
 use u256::U256;
 
@@ -25,6 +25,10 @@ impl FieldElement {
         let mut ele = FieldElement {n};
         FieldElement::normalize_mod_p(&mut ele.n);
         ele 
+    }
+
+    pub fn zero() -> Self {
+        FieldElement {n: U256 {d0: 0, d1: 0}}
     }
 
     fn normalize_mod_p(n: &mut U256) {
@@ -184,23 +188,22 @@ impl<'a> Mul<&'a FieldElement> for FieldElement {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum S256Point {
-    Point(Point),
-    Infinity,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Point {
     pub x: FieldElement,
     pub y: FieldElement,
+    pub is_infinity: bool,
 }
 
 impl Point {
     pub fn new(x: FieldElement, y: FieldElement) -> Self {
-        Point {x, y}
+        Point {x, y, is_infinity: false}
     }
 
-    pub fn double(&mut self) {
+    pub fn zero() -> Self {
+        Point {x: FieldElement{n: U256 {d0: 0, d1: 0}}, y: FieldElement{n: U256 {d0: 0, d1: 0}}, is_infinity: true}
+    }
+
+    pub fn double_assign(&mut self) {
         // let s = (3 * self.x * self.x) / (2 * self.y);
         // let x = s * s - 2 * self.x;
         // let y = s * (self.x - x) - self.y;
@@ -224,54 +227,53 @@ impl Point {
         x.mul_assign(&s);
         self.y.add_assign(&x);
     }
-}
 
-impl<'a> MulAssign<&'a U256> for S256Point {
-    fn mul_assign(&mut self, rhs: &'a U256) {
-        match self {
-            S256Point::Point(point) => {
-                let mut double = point.clone();
-                let mut flag = 1u128;
-                while flag != 0 {
-                    if rhs.d1 & flag == flag {
-                        *self += &double;
-                    }
-                    double.double();
-                    flag <<= 1;
+    pub fn add_assign(&mut self, rhs: &Point) {
+        if self.is_infinity {
+           *self = rhs.clone(); 
+        } else if !rhs.is_infinity {
+            if self.x == rhs.x {
+                if self.y == rhs.y {
+                    self.double_assign();
+                } else { // self.y = -rhs.y
+                    self.is_infinity = true;
                 }
-                flag = 1u128;
-                while flag != 0 {
-                    if rhs.d0 & flag == flag {
-                        *self += &double;
-                    }
-                    double.double();
-                    flag <<= 1;
-                }
-            },
-            S256Point::Infinity => {},
-        }
-    }
-}
-
-impl<'a> AddAssign<&'a Point> for S256Point {
-    fn add_assign(&mut self, rhs: &'a Point) {
-        match self {
-            S256Point::Point(lhs) => {
-                if lhs.x == rhs.x {
-                    if rhs.y == lhs.y {
-                        lhs.double();
-                    } else {
-                        *self = S256Point::Infinity;
-                    }
-                } else {
+            } else {
                     // let s = (rhs.y - lhs.y) / (rhs.x - lhs.x);
                     // let x = s * s - lhs.x - rhs.x;
                     // let y = s * (lhs.x - x) - lhs.y;
-                    // S256Point::Point(Point {x, y})
-                }
-            },
-            S256Point::Infinity => *self = S256Point::Point(rhs.clone()),
+                    // Point {x, y}
+            }
         }
+    }
+
+    pub fn mul_scalar(&self, n: &U256) -> Point {
+        // This function assumes self is not the point at infinity 
+        let mut product = Point::zero();
+        
+        let mut double = self.clone();
+        
+        // 2nd digit
+        let mut flag = 1u128;
+        while flag != 0 {
+            if n.d1 & flag == flag {
+                product.add_assign(&double);
+            }
+            double.double_assign();
+            flag <<= 1;
+        }
+        
+        // 1st digit
+        flag = 1u128;
+        while flag != 0 {
+            if n.d0 & flag == flag {
+                product.add_assign(&double)
+            }
+            double.double_assign();
+            flag <<= 1;
+        }
+
+        product
     }
 }
 
