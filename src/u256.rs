@@ -32,6 +32,15 @@ impl U256 {
         }
     }
 
+    fn hex_to_u128(hex_digits: &[u8]) -> Result<u128, U256ParseError> {
+        let mut d = 0;
+        for i in 0..hex_digits.len() {
+            d <<= 4;
+            d |= U256::parse_digit(&hex_digits[i])?;
+        }
+        Ok(d)
+    }
+
     pub fn from_hex_str(s: &str) -> Result<U256, U256ParseError> {
         let hex_digits = s.as_bytes();
         let len = hex_digits.len();
@@ -40,57 +49,48 @@ impl U256 {
         } else if len > 64 {
             return Err(U256ParseError::Overflow);
         }
-        let mut d0 = 0;
-        let mut d1 = 0;
-        let mut i = 0;
-        if len > 32 {
-            let d0_len = len - 32;
-            while i < d0_len {
-                d0 <<= 4;
-                d0 |= U256::parse_digit(&hex_digits[i])?;
-                i += 1;
-            }
+        if len >= 32 {
+            let start = &hex_digits[..len - 32];
+            let end = &hex_digits[len - 32..];
+            Ok(U256 {
+                d0: U256::hex_to_u128(start)?,
+                d1: U256::hex_to_u128(end)?,
+            })
+        } else {
+            Ok(U256 {
+                d0: 0,
+                d1: U256::hex_to_u128(hex_digits)?,
+            })
         }
-        while i < len {
-            d1 <<= 4;
-            d1 |= U256::parse_digit(&hex_digits[i])?;
-            i += 1;
+    }
+
+    fn u128_to_hex(digit: u128) -> Vec<u8> {
+        let mut d = digit;
+        let mut bytes = vec![0u8; 32];
+        for i in (0..32).rev() {
+            bytes[i as usize] = match d & 0xF {
+                nibble @ 0...9 => b'0' + nibble as u8,
+                nibble => b'a' + nibble as u8 - 10,
+            };
+            d >>= 4;
         }
-        Ok(U256 { d0, d1 })
+        bytes
     }
 
     pub fn to_hex_string(&self) -> String {
-        let mut d0 = self.d0;
-        let mut d1 = self.d1;
-        let mut bytes = [0u8; 64];
-        let mut last_non_zero = 63;
-        let mut i = 63i8;
-        while i > 31 {
-            let byte = d1 & 0xF;
-            if byte != 0 {
+        let mut bytes = U256::u128_to_hex(self.d0);
+        bytes.append(&mut U256::u128_to_hex(self.d1));
+        let mut last_non_zero = 0;
+        for i in 0..64 {
+            if bytes[i] != b'0' {
                 last_non_zero = i;
+                break;
             }
-            bytes[i as usize] = match byte {
-                nibble @ 0...9 => b'0' + nibble as u8,
-                nibble => b'a' + nibble as u8 - 10,
-            };
-            d1 >>= 4;
-            i -= 1;
         }
-        while i >= 0 {
-            let byte = d0 & 0xF;
-            if byte != 0 {
-                last_non_zero = i;
-            }
-            bytes[i as usize] = match byte {
-                nibble @ 0...9 => b'0' + nibble as u8,
-                nibble => b'a' + nibble as u8 - 10,
-            };
-            d0 >>= 4;
-            i -= 1;
-        }
-        String::from_utf8((&bytes[last_non_zero as usize..]).to_vec()).unwrap()
+        String::from_utf8((&bytes[last_non_zero..]).to_vec()).unwrap()
     }
+
+    pub fn to_base58_string(&self) {}
 
     pub fn mul_u128(lhs: &u128, rhs: &u128) -> U256 {
         // k = 2^64
