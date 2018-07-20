@@ -5,7 +5,10 @@ use u256::U256;
 // P = 2^256 - 2^32 - 2^9 - 2^8 - 2^7 - 2^6 - 2^4 - 1
 const P_D1: u128 = 0xFFFFFFFF_FFFFFFFF_FFFFFFFE_FFFFFC2F;
 const P_MINUS_2_D1: u128 = 0xFFFFFFFF_FFFFFFFF_FFFFFFFE_FFFFFC2D;
-const P: U256 = U256 {d0: 0xFFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF, d1: P_D1};
+const P: U256 = U256 {
+    d0: 0xFFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF,
+    d1: P_D1,
+};
 
 // const G_X: U256 = U256 {d0: 0x79BE667EF9DCBBAC55A06295CE870B07, d1:0x029BFCDB2DCE28D959F2815B16F81798};
 // const G_Y: U256 = U256 {d0: 0x483ADA7726A3C4655DA4FBFC0E1108A8, d1: 0xFD17B448A68554199C47D08FFB10D4B8};
@@ -22,13 +25,15 @@ pub struct FieldElement {
 
 impl FieldElement {
     pub fn new(n: U256) -> Self {
-        let mut ele = FieldElement {n};
+        let mut ele = FieldElement { n };
         FieldElement::normalize_mod_p(&mut ele.n);
-        ele 
+        ele
     }
 
     pub fn zero() -> Self {
-        FieldElement {n: U256 {d0: 0, d1: 0}}
+        FieldElement {
+            n: U256 { d0: 0, d1: 0 },
+        }
     }
 
     fn normalize_mod_p(n: &mut U256) {
@@ -130,7 +135,7 @@ impl FieldElement {
 
         self.n = U256::mul_u128(&d0, &d0);
         self.mul_assign_2_pow_256();
-        
+
         let mut l0l1 = FieldElement::new(U256::mul_u128(&d0, &d1));
         l0l1.mul_assign_2_pow_128();
 
@@ -196,11 +201,23 @@ pub struct Point {
 
 impl Point {
     pub fn new(x: FieldElement, y: FieldElement) -> Self {
-        Point {x, y, is_infinity: false}
+        Point {
+            x,
+            y,
+            is_infinity: false,
+        }
     }
 
     pub fn zero() -> Self {
-        Point {x: FieldElement{n: U256 {d0: 0, d1: 0}}, y: FieldElement{n: U256 {d0: 0, d1: 0}}, is_infinity: true}
+        Point {
+            x: FieldElement {
+                n: U256 { d0: 0, d1: 0 },
+            },
+            y: FieldElement {
+                n: U256 { d0: 0, d1: 0 },
+            },
+            is_infinity: true,
+        }
     }
 
     pub fn double_assign(&mut self) {
@@ -230,29 +247,30 @@ impl Point {
 
     pub fn add_assign(&mut self, rhs: &Point) {
         if self.is_infinity {
-           *self = rhs.clone(); 
+            *self = rhs.clone();
         } else if !rhs.is_infinity {
             if self.x == rhs.x {
                 if self.y == rhs.y {
                     self.double_assign();
-                } else { // self.y = -rhs.y
+                } else {
+                    // self.y = -rhs.y
                     self.is_infinity = true;
                 }
             } else {
-                    // let s = (rhs.y - lhs.y) / (rhs.x - lhs.x);
-                    // let x = s * s - lhs.x - rhs.x;
-                    // let y = s * (lhs.x - x) - lhs.y;
-                    // Point {x, y}
+                // let s = (rhs.y - lhs.y) / (rhs.x - lhs.x);
+                // let x = s * s - lhs.x - rhs.x;
+                // let y = s * (lhs.x - x) - lhs.y;
+                // Point {x, y}
             }
         }
     }
 
     pub fn mul_scalar(&self, n: &U256) -> Point {
-        // This function assumes self is not the point at infinity 
+        // This function assumes self is not the point at infinity
         let mut product = Point::zero();
-        
+
         let mut double = self.clone();
-        
+
         // 2nd digit
         let mut flag = 1u128;
         while flag != 0 {
@@ -262,7 +280,7 @@ impl Point {
             double.double_assign();
             flag <<= 1;
         }
-        
+
         // 1st digit
         flag = 1u128;
         while flag != 0 {
@@ -279,16 +297,27 @@ impl Point {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::u256::*;
+    use super::*;
 
-    const P_MINUS_1: U256 = U256 {d0: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, d1: 0xFFFFFFFF_FFFFFFFF_FFFFFFFE_FFFFFC2E};
-    const P_MINUS_2: U256 = U256 {d0: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, d1: 0xFFFFFFFF_FFFFFFFF_FFFFFFFE_FFFFFC2D};
+    const P_MINUS_1: U256 = U256 {
+        d0: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
+        d1: 0xFFFFFFFF_FFFFFFFF_FFFFFFFE_FFFFFC2E,
+    };
+    const P_MINUS_2: U256 = U256 {
+        d0: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
+        d1: 0xFFFFFFFF_FFFFFFFF_FFFFFFFE_FFFFFC2D,
+    };
 
     #[test]
     pub fn test_new_field_element() {
-        let p_plus_2 = U256::from_hex_str("fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc31").unwrap();
-        assert_eq!(FieldElement::new(U256::from_u128(2)), FieldElement::new(p_plus_2));
+        let p_plus_2 = U256::from_hex_str(
+            "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc31",
+        ).unwrap();
+        assert_eq!(
+            FieldElement::new(U256::from_u128(2)),
+            FieldElement::new(p_plus_2)
+        );
     }
 
     #[test]
@@ -306,8 +335,13 @@ mod tests {
         n1.add_assign(&n2);
         assert_eq!(FieldElement::new(P_MINUS_2), n1);
         // (...) += (...)
-        let mut n1 = FieldElement::new(U256::from_hex_str("2000007a4fffffffffffffffefffff859fff1601b").unwrap());
-        let n2 = FieldElement::new(U256::from_hex_str("fffffffffffffffffffffffdfffff85b0000000000000001000007a5000e9c16").unwrap());
+        let mut n1 = FieldElement::new(
+            U256::from_hex_str("2000007a4fffffffffffffffefffff859fff1601b").unwrap(),
+        );
+        let n2 = FieldElement::new(
+            U256::from_hex_str("fffffffffffffffffffffffdfffff85b0000000000000001000007a5000e9c16")
+                .unwrap(),
+        );
         n1.add_assign(&n2);
         assert_eq!(FieldElement::new(U256::from_u128(2)), n1);
     }
