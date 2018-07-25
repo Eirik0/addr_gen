@@ -13,6 +13,7 @@ pub struct U256 {
 }
 
 impl U256 {
+    // 340_282_366_920_938_463_463_374_607_431_768_211_455u128
     pub const MAX_U128: u128 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
 
     pub fn new(d0: u128, d1: u128) -> Self {
@@ -23,7 +24,8 @@ impl U256 {
         U256 { d0: 0, d1 }
     }
 
-    fn parse_digit(digit: &u8) -> Result<u128, U256ParseError> {
+    // From Hex
+    fn parse_hex_digit(digit: &u8) -> Result<u128, U256ParseError> {
         match digit {
             nibble @ b'A'...b'F' => Ok((nibble + 10 - b'A') as u128),
             nibble @ b'a'...b'f' => Ok((nibble + 10 - b'a') as u128),
@@ -36,7 +38,7 @@ impl U256 {
         let mut d = 0;
         for i in 0..hex_digits.len() {
             d <<= 4;
-            d |= U256::parse_digit(&hex_digits[i])?;
+            d |= U256::parse_hex_digit(&hex_digits[i])?;
         }
         Ok(d)
     }
@@ -64,13 +66,14 @@ impl U256 {
         }
     }
 
+    // To Hex
     fn u128_to_hex(digit: u128) -> Vec<u8> {
         let mut d = digit;
         let mut bytes = vec![0u8; 32];
         for i in (0..32).rev() {
             bytes[i as usize] = match d & 0xF {
                 nibble @ 0...9 => b'0' + nibble as u8,
-                nibble => b'a' + nibble as u8 - 10,
+                nibble => b'W' + nibble as u8,
             };
             d >>= 4;
         }
@@ -90,8 +93,78 @@ impl U256 {
         String::from_utf8((&bytes[last_non_zero..]).to_vec()).unwrap()
     }
 
-    pub fn to_base58_string(&self) {}
+    // To Base 58
+    fn u128_to_base64(digit: u128) -> Vec<u8> {
+        let mut d = digit;
+        let mut nibbles = vec![0u8; 16];
+        for i in 0..16 {
+            nibbles[i as usize] = (d & 0xFF) as u8;
+            d >>= 8;
+        }
+        nibbles
+    }
 
+    fn div_mod(lhs: u32, rhs: u32) -> (u32, u32) {
+        let div = lhs / rhs;
+        let rem = lhs - (div * rhs);
+        (div, rem)
+    }
+
+    pub fn base64_to_base58(bytes: &Vec<u8>) -> Vec<u8> {
+        let mut base58_digits = vec![0u8; 44]; // log(2^256) / log(58) ~= 43.7
+        let mut n = 0u32; // XXX Concider consecutive zeros in bytes
+        let mut i_64 = 0;
+        let mut i_58 = 43;
+        while i_64 < bytes.len() {
+            let mut shift = 0;
+            while n < 3364 && i_64 < bytes.len() {
+                if bytes[i_64] != 0 {
+                    n += (bytes[i_64] as u32) << shift;
+                }
+                shift += 8;
+                i_64 += 1;
+            }
+            if n >= 3364 {
+                let (div, rem) = U256::div_mod(n, 58);
+                n = div;
+                base58_digits[i_58] = rem as u8;
+                i_58 -= 1;
+            }
+            i_64 += 1;
+        }
+        if n >= 58 {
+            let (div, rem) = U256::div_mod(n, 58);
+            n = div;
+            base58_digits[i_58] = rem as u8;
+            i_58 -= 1;
+        }
+        base58_digits[i_58] = n as u8;
+        base58_digits
+    }
+
+    pub fn to_base58_string(&self) -> String {
+        let mut bytes = U256::u128_to_base64(self.d1);
+        bytes.append(&mut U256::u128_to_base64(self.d0));
+        let mut base58_digits = U256::base64_to_base58(&bytes);
+        for i in 0..base58_digits.len() {
+            // 0-9, A-Z, a-z Omitting 0O1l
+            // 0-8 -> 123456789
+            // 9-22 -> ABCDEFGHIJKLMN
+            // 23-33 -> PQRSTUVWXYZ
+            // 34-44 -> abcdefghijk
+            // 45-58 -> mnopqrstuvwxyz
+            base58_digits[i] = match base58_digits[i] {
+                digit @ 0...8 => digit + b'1',
+                digit @ 9...22 => digit - 8 + b'A',
+                digit @ 23...33 => digit - 22 + b'P',
+                digit @ 34...44 => digit - 33 + b'a',
+                digit => digit - 44 + b'm',
+            }
+        }
+        String::from_utf8((&base58_digits[..]).to_vec()).unwrap()
+    }
+
+    // u128 helpers
     pub fn mul_u128(lhs: &u128, rhs: &u128) -> U256 {
         // k = 2^64
         // lhs = k * l_d0 + l_d1
@@ -120,6 +193,7 @@ impl U256 {
         U256 { d0, d1 }
     }
 
+    // Operations
     pub fn overflowing_add_assign(&mut self, rhs: &U256) -> bool {
         let (d1, carry_d1) = self.d1.overflowing_add(rhs.d1);
         self.d1 = d1;
@@ -230,8 +304,6 @@ impl fmt::Display for U256ParseError {
 mod tests {
     use super::*;
 
-    const MAX_U128: u128 = 340_282_366_920_938_463_463_374_607_431_768_211_455u128;
-
     #[test]
     fn test_hex_to_u256() {
         assert_eq!(U256 { d0: 0, d1: 1 }, U256::from_hex_str("1").unwrap());
@@ -241,7 +313,7 @@ mod tests {
         assert_eq!(
             U256 {
                 d0: 0,
-                d1: MAX_U128
+                d1: U256::MAX_U128
             },
             U256::from_hex_str("ffffffffffffffffffffffffffffffff").unwrap()
         );
@@ -275,12 +347,40 @@ mod tests {
     }
 
     #[test]
+    fn test_to_base58_string() {
+        assert_eq!(
+            "11111111111111111111111111111111111111111112",
+            U256::from_u128(1).to_base58_string()
+        );
+        assert_eq!(
+            "1111111111111111111111111111111111111111111z",
+            U256::from_u128(57).to_base58_string()
+        );
+        assert_eq!(
+            "11111111111111111111111111111111111111111121",
+            U256::from_u128(58).to_base58_string()
+        );
+        assert_eq!(
+            "111111111111111111111111111111111111111111zz",
+            U256::from_u128(3363).to_base58_string()
+        );
+        assert_eq!(
+            "11111111111111111111111111111111111111111211",
+            U256::from_u128(3364).to_base58_string()
+        );
+        assert_eq!(
+            "111111111111111111111111111111111111111114fr",
+            U256::from_u128(12345).to_base58_string()
+        );
+    }
+
+    #[test]
     fn test_mul_u128() {
         let product = U256::new(
             0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE,
             0x00000000000000000000000000000001,
         );
-        let multiplication = U256::mul_u128(&MAX_U128, &MAX_U128);
+        let multiplication = U256::mul_u128(&U256::MAX_U128, &U256::MAX_U128);
         assert_eq!(product, multiplication);
     }
 
@@ -300,11 +400,11 @@ mod tests {
 
     #[test]
     fn test_overflowing_add_assign() {
-        let mut big_n = U256::new(MAX_U128, MAX_U128 - 1);
+        let mut big_n = U256::new(U256::MAX_U128, U256::MAX_U128 - 1);
         let one = U256::from_u128(1);
         let overflow = big_n.overflowing_add_assign(&one);
         assert!(!overflow);
-        assert_eq!(U256::new(MAX_U128, MAX_U128), big_n);
+        assert_eq!(U256::new(U256::MAX_U128, U256::MAX_U128), big_n);
         let overflow = big_n.overflowing_add_assign(&one);
         assert!(overflow);
         assert_eq!(U256::from_u128(0), big_n);
@@ -327,7 +427,7 @@ mod tests {
         n -= &one;
         assert_eq!(U256::new(1, 0), n);
         n -= &one;
-        assert_eq!(U256::new(0, MAX_U128), n);
+        assert_eq!(U256::new(0, U256::MAX_U128), n);
         let mut two = U256::from_hex_str(
             "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc31",
         ).unwrap();
@@ -341,7 +441,7 @@ mod tests {
 
     #[test]
     fn test_add_assign() {
-        let mut n = U256::new(0, MAX_U128);
+        let mut n = U256::new(0, U256::MAX_U128);
         n += 1;
         assert_eq!(U256::new(1, 0), n);
         n += 1;
