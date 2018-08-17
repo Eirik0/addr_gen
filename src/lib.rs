@@ -1,3 +1,4 @@
+pub mod hash;
 pub mod s256point;
 pub mod u256;
 
