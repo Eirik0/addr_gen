@@ -1,5 +1,5 @@
 pub mod hash;
-pub mod s256point;
+pub mod secp256k1;
 pub mod u256;
 
 #[cfg(test)]
